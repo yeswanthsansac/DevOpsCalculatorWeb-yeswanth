@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -8,6 +9,7 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -27,8 +29,7 @@ pipeline {
             }
         }
 
-
-stage('Verify JaCoCo Report') {
+        stage('Verify JaCoCo Report') {
             steps {
                 sh '''
                     test -s target/site/jacoco/jacoco.xml
@@ -38,27 +39,25 @@ stage('Verify JaCoCo Report') {
             }
         }
 
-
         stage('SonarQube Analysis') {
-    steps {
-        withCredentials([
-            string(
-                credentialsId: 'sonar-token',
-                variable: 'SONAR_TOKEN'
-            )
-        ]) {
-            sh '''
-                mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                  -Dsonar.projectKey=DevOps-Calculator-Web-Yashwanth \
-                  -Dsonar.projectName="DevOps Calculator Web - Yashwanth" \
-                  -Dsonar.host.url="$SONAR_HOST_URL" \
-                  -Dsonar.token="$SONAR_TOKEN" \
-                  -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
-            '''
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'sonar-token',
+                        variable: 'SONAR_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                          -Dsonar.projectKey=DevOps-Calculator-Web-Yashwanth \
+                          -Dsonar.projectName="DevOps Calculator Web - Yashwanth" \
+                          -Dsonar.host.url="$SONAR_HOST_URL" \
+                          -Dsonar.token="$SONAR_TOKEN" \
+                          -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                    '''
+                }
+            }
         }
-    }
-}
-
 
         stage('Verify WAR') {
             steps {
@@ -69,16 +68,19 @@ stage('Verify JaCoCo Report') {
             }
         }
 
-                stage('Deploy to Nexus') {
+        stage('Deploy to Nexus') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'nexus_yashwanth',
-                    usernameVariable: 'NEXUS_USERNAME',
-                    passwordVariable: 'NEXUS_PASSWORD'
-                )]) {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'nexus_yashwanth',
+                        usernameVariable: 'NEXUS_USERNAME',
+                        passwordVariable: 'NEXUS_PASSWORD'
+                    )
+                ]) {
                     sh '''
                         set +x
                         umask 077
+
                         cat > "$WORKSPACE/.mvn-settings.xml" <<EOF
 <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
   <servers>
@@ -90,11 +92,12 @@ stage('Verify JaCoCo Report') {
   </servers>
 </settings>
 EOF
+
                         mvn -B -s "$WORKSPACE/.mvn-settings.xml" deploy
                     '''
                 }
             }
-
+        }
     }
 
     post {
