@@ -36,6 +36,15 @@
         </dependency>
     </dependencies>
 
+    <distributionManagement>
+    <repository>
+        <id>nexus-releases</id>
+        <name>Nexus Maven Releases</name>
+        <url>http://nexus.leancloudandevops.online:8081/repository/maven-releases/</url>
+    </repository>
+</distributionManagement>
+
+
     <build>
         <!-- Keeps the local WAR name stable for Tomcat deployment -->
         <finalName>calculator</finalName>
