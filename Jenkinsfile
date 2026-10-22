@@ -26,6 +26,17 @@ pipeline {
                 sh 'mvn -B clean verify'
             }
         }
+        
+
+stage('Verify JaCoCo Report') {
+            steps {
+                sh '''
+                    test -s target/site/jacoco/jacoco.xml
+                    test -s target/site/jacoco/index.html
+                    echo "JaCoCo XML and HTML reports found."
+                '''
+            }
+        }
 
 
         stage('SonarQube Analysis') {
@@ -41,7 +52,8 @@ pipeline {
                   -Dsonar.projectKey=DevOps-Calculator-Web-Yashwanth \
                   -Dsonar.projectName="DevOps Calculator Web - Yashwanth" \
                   -Dsonar.host.url="$SONAR_HOST_URL" \
-                  -Dsonar.token="$SONAR_TOKEN"
+                  -Dsonar.token="$SONAR_TOKEN" \
+                  -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
             '''
         }
     }
