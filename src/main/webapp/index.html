@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DevOps Calculator V2.0</title>
+</head>
+<body>
+  <h1>DevOps Calculator</h1>
+  <form action="calculate" method="get">
+    <label for="a">First number:</label>
+    <input type="number" id="a" name="a" step="1" required>
+    <br><br>
+    <label for="b">Second number:</label>
+    <input type="number" id="b" name="b" step="1" required>
+    <br><br>
+    <label for="operation">Operation:</label>
+    <select id="operation" name="operation">
+      <option value="add">Addition</option>
+      <option value="subtract">Subtraction</option>
+      <option value="multiply">Multiplication</option>
+      <option value="divide">Division</option>
+    </select>
+    <br><br>
+    <button type="submit">Calculate</button>
+  </form>
+</body>
+</html>
