@@ -41,6 +41,7 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
+                  withSonarQubeEnv('sonar-server') {
                 withCredentials([
                     string(
                         credentialsId: 'sonar-token',
@@ -54,10 +55,20 @@ pipeline {
                           -Dsonar.host.url="$SONAR_HOST_URL" \
                           -Dsonar.token="$SONAR_TOKEN" \
                           -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                          
                     '''
                 }
             }
         }
+        
+        stage('Quality Gate') {
+    steps {
+        timeout(time: 5, unit: 'MINUTES') {
+            waitForQualityGate abortPipeline: true
+        }
+    }
+}
+
 
         stage('Verify WAR') {
             steps {
@@ -115,6 +126,7 @@ EOF
 
         failure {
             echo 'Pipeline failed. Review the Jenkins console output.'
+        }    
         }
     }
 }
