@@ -39,28 +39,37 @@ pipeline {
             }
         }
 
-        stage('SonarQube Analysis') {
-            steps {
-                  withSonarQubeEnv('sonar-server') {
-                withCredentials([
-                    string(
-                        credentialsId: 'sonar-token',
-                        variable: 'SONAR_TOKEN'
-                    )
-                ]) {
-                    sh '''
-                        mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                          -Dsonar.projectKey=DevOps-Calculator-Web-Yashwanth \
+       
+        
+
+stage('SonarQube Analysis') {
+    steps {
+        withSonarQubeEnv('sonar-server') {
+            withCredentials([
+                string(
+                    credentialsId: 'sonar-token',
+                    variable: 'SONAR_TOKEN'
+                )
+            ]) {
+                sh '''
+                    set +x
+                    mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \\
+                      -Dsonar.projectKey=DevOps-Calculator-Web-Yashwanth \
                           -Dsonar.projectName="DevOps Calculator Web - Yashwanth" \
                           -Dsonar.host.url="$SONAR_HOST_URL" \
                           -Dsonar.token="$SONAR_TOKEN" \
                           -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
-                          
-                    '''
-                }
+
+                          '''
             }
         }
-        
+    }
+}
+
+
+
+
+
        
 
 
