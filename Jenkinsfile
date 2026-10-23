@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -39,39 +38,29 @@ pipeline {
             }
         }
 
-       
-        
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonar-server') {
+                    withCredentials([
+                        string(
+                            credentialsId: 'sonar-token',
+                            variable: 'SONAR_TOKEN'
+                        )
+                    ]) {
+                        sh '''
+                            set +x
 
-stage('SonarQube Analysis') {
-    steps {
-        withSonarQubeEnv('sonar-server') {
-            withCredentials([
-                string(
-                    credentialsId: 'sonar-token',
-                    variable: 'SONAR_TOKEN'
-                )
-            ]) {
-                sh '''
-                    set +x
-                    mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \\
-                      -Dsonar.projectKey=DevOps-Calculator-Web-Yashwanth \
-                          -Dsonar.projectName="DevOps Calculator Web - Yashwanth" \
-                          -Dsonar.host.url="$SONAR_HOST_URL" \
-                          -Dsonar.token="$SONAR_TOKEN" \
-                          -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
-
-                          '''
+                            mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                                -Dsonar.projectKey=DevOps-Calculator-Web-Yashwanth \
+                                -Dsonar.projectName="DevOps Calculator Web - Yashwanth" \
+                                -Dsonar.host.url="$SONAR_HOST_URL" \
+                                -Dsonar.token="$SONAR_TOKEN" \
+                                -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                        '''
+                    }
+                }
             }
         }
-    }
-}
-
-
-
-
-
-       
-
 
         stage('Verify WAR') {
             steps {
@@ -82,13 +71,13 @@ stage('SonarQube Analysis') {
             }
         }
 
-         stage('Quality Gate') {
-    steps {
-        timeout(time: 5, unit: 'MINUTES') {
-            waitForQualityGate abortPipeline: true
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
         }
-    }
-}
 
         stage('Deploy to Nexus') {
             steps {
@@ -105,13 +94,13 @@ stage('SonarQube Analysis') {
 
                         cat > "$WORKSPACE/.mvn-settings.xml" <<EOF
 <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
-  <servers>
-    <server>
-      <id>nexus-releases</id>
-      <username>${NEXUS_USERNAME}</username>
-      <password>${NEXUS_PASSWORD}</password>
-    </server>
-  </servers>
+    <servers>
+        <server>
+            <id>nexus-releases</id>
+            <username>${NEXUS_USERNAME}</username>
+            <password>${NEXUS_PASSWORD}</password>
+        </server>
+    </servers>
 </settings>
 EOF
 
@@ -124,11 +113,15 @@ EOF
 
     post {
         always {
-            junit allowEmptyResults: true,
-                  testResults: '**/target/surefire-reports/*.xml'
+            junit(
+                allowEmptyResults: true,
+                testResults: '**/target/surefire-reports/*.xml'
+            )
 
-            archiveArtifacts artifacts: 'target/*.war',
-                             fingerprint: true
+            archiveArtifacts(
+                artifacts: 'target/*.war',
+                fingerprint: true
+            )
         }
 
         success {
@@ -137,7 +130,6 @@ EOF
 
         failure {
             echo 'Pipeline failed. Review the Jenkins console output.'
-        }    
         }
     }
 }
