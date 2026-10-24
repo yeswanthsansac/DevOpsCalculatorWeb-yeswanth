@@ -19,6 +19,7 @@ pipeline {
             steps {
                 sh 'java -version'
                 sh 'mvn -version'
+                sh 'ansible --version'
             }
         }
 
@@ -31,8 +32,11 @@ pipeline {
         stage('Verify JaCoCo Report') {
             steps {
                 sh '''
+                    set -eu
+
                     test -s target/site/jacoco/jacoco.xml
                     test -s target/site/jacoco/index.html
+
                     echo "JaCoCo XML and HTML reports found."
                 '''
             }
@@ -49,6 +53,7 @@ pipeline {
                     ]) {
                         sh '''
                             set +x
+                            set -eu
 
                             mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
                                 -Dsonar.projectKey=DevOps-Calculator-Web-Yashwanth \
@@ -56,7 +61,7 @@ pipeline {
                                 -Dsonar.host.url="$SONAR_HOST_URL" \
                                 -Dsonar.token="$SONAR_TOKEN" \
                                 -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
-                                -Dsonar.coverage.exclusions=**/CalculatorServlet.java
+                                -Dsonar.coverage.exclusions="**/CalculatorServlet.java"
                         '''
                     }
                 }
@@ -66,6 +71,8 @@ pipeline {
         stage('Verify WAR') {
             steps {
                 sh '''
+                    set -eu
+
                     test -f target/calculator.war
                     ls -lh target/calculator.war
                 '''
@@ -91,6 +98,8 @@ pipeline {
                 ]) {
                     sh '''
                         set +x
+                        set -eu
+
                         umask 077
 
                         cat > "$WORKSPACE/.mvn-settings.xml" <<EOF
@@ -106,6 +115,127 @@ pipeline {
 EOF
 
                         mvn -B -s "$WORKSPACE/.mvn-settings.xml" deploy
+
+                        rm -f "$WORKSPACE/.mvn-settings.xml"
+                    '''
+                }
+            }
+        }
+
+        stage('Provision Tomcat Server via Ansible') {
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ansible-target-ssh-student',
+                        keyFileVariable: 'ANSIBLE_SSH_KEY',
+                        usernameVariable: 'ANSIBLE_SSH_USER'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+
+                        export ANSIBLE_CONFIG="$WORKSPACE/ansible/ansible.cfg"
+
+                        INVENTORY="$WORKSPACE/ansible/inventory.ini"
+
+                        echo "Testing Ansible connectivity..."
+
+                        ansible calculator \
+                            -i "$INVENTORY" \
+                            -m ping \
+                            --private-key="$ANSIBLE_SSH_KEY" \
+                            -e "ansible_user=$ANSIBLE_SSH_USER"
+
+                        echo "Installing Java..."
+
+                        ansible-playbook \
+                            -i "$INVENTORY" \
+                            "$WORKSPACE/ansible/install-java.yml" \
+                            --private-key="$ANSIBLE_SSH_KEY" \
+                            -e "ansible_user=$ANSIBLE_SSH_USER"
+
+                        echo "Installing Tomcat..."
+
+                        ansible-playbook \
+                            -i "$INVENTORY" \
+                            "$WORKSPACE/ansible/install-tomcat.yml" \
+                            --private-key="$ANSIBLE_SSH_KEY" \
+                            -e "ansible_user=$ANSIBLE_SSH_USER"
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to Tomcat via Ansible') {
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ansible-target-ssh-student',
+                        keyFileVariable: 'ANSIBLE_SSH_KEY',
+                        usernameVariable: 'ANSIBLE_SSH_USER'
+                    ),
+                    string(
+                        credentialsId: 'ansible-vault-password',
+                        variable: 'ANSIBLE_VAULT_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        set -eu
+
+                        export ANSIBLE_CONFIG="$WORKSPACE/ansible/ansible.cfg"
+
+                        INVENTORY="$WORKSPACE/ansible/inventory.ini"
+                        PLAYBOOK="$WORKSPACE/ansible/deploy-calculator.yml"
+
+                        echo "Getting application version..."
+
+                        APP_VERSION="$(mvn -q -DforceStdout \
+                            help:evaluate \
+                            -Dexpression=project.version)"
+
+                        test -n "$APP_VERSION"
+                        test -r "$ANSIBLE_SSH_KEY"
+
+                        echo "Application version: $APP_VERSION"
+
+                        echo "Validating SSH private key..."
+
+                        ssh-keygen -y \
+                            -f "$ANSIBLE_SSH_KEY" \
+                            >/dev/null
+
+                        echo "Testing Ansible connectivity..."
+
+                        ansible calculator \
+                            -i "$INVENTORY" \
+                            -m ping \
+                            --private-key="$ANSIBLE_SSH_KEY" \
+                            -e "ansible_user=$ANSIBLE_SSH_USER"
+
+                        echo "Creating temporary Ansible Vault password file..."
+
+                        VAULT_PASS_FILE="$(mktemp)"
+
+                        trap 'rm -f "$VAULT_PASS_FILE"' EXIT
+
+                        chmod 600 "$VAULT_PASS_FILE"
+
+                        printf '%s' "$ANSIBLE_VAULT_PASSWORD" > "$VAULT_PASS_FILE"
+
+                        unset ANSIBLE_VAULT_PASSWORD
+
+                        echo "Deploying application to Tomcat..."
+
+                        ansible-playbook \
+                            -i "$INVENTORY" \
+                            "$PLAYBOOK" \
+                            --vault-password-file "$VAULT_PASS_FILE" \
+                            --private-key="$ANSIBLE_SSH_KEY" \
+                            -e "ansible_user=$ANSIBLE_SSH_USER" \
+                            -e "artifact_version=$APP_VERSION"
+
+                        echo "Tomcat deployment completed successfully."
                     '''
                 }
             }
@@ -113,6 +243,7 @@ EOF
     }
 
     post {
+
         always {
             junit(
                 allowEmptyResults: true,
@@ -126,7 +257,7 @@ EOF
         }
 
         success {
-            echo 'Build, JUnit tests, WAR verification, and artifact archiving succeeded.'
+            echo 'Build, tests, SonarQube analysis, Nexus deployment, and Tomcat deployment succeeded.'
         }
 
         failure {

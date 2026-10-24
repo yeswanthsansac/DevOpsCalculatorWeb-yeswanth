@@ -1,0 +1,114 @@
+---
+- name: Install and configure Tomcat 10.1
+  hosts: calculator
+  become: true
+  gather_facts: true
+
+  vars:
+    tomcat_version: "10.1.44"
+    tomcat_user: "tomcat"
+    tomcat_install_dir: "/opt/tomcat"
+    tomcat_archive: "/tmp/apache-tomcat-{{ tomcat_version }}.tar.gz"
+    tomcat_download_url: "https://archive.apache.org/dist/tomcat/tomcat-10/v10.1.44/bin/apache-tomcat-10.1.44.tar.gz"
+
+  tasks:
+    - name: Verify Amazon Linux 2023
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Amazon"
+          - ansible_distribution_major_version == "2023"
+        fail_msg: "This playbook expects Amazon Linux 2023."
+
+    - name: Install required packages
+      ansible.builtin.dnf:
+        name:
+          - tar
+          - gzip
+        state: present
+
+    - name: Create Tomcat system user
+      ansible.builtin.user:
+        name: "{{ tomcat_user }}"
+        system: true
+        shell: /sbin/nologin
+        home: "{{ tomcat_install_dir }}"
+        create_home: false
+
+    - name: Create Tomcat installation directory
+      ansible.builtin.file:
+        path: "{{ tomcat_install_dir }}"
+        state: directory
+        owner: "{{ tomcat_user }}"
+        group: "{{ tomcat_user }}"
+        mode: "0755"
+
+    - name: Download Tomcat archive
+      ansible.builtin.get_url:
+        url: "{{ tomcat_download_url }}"
+        dest: "{{ tomcat_archive }}"
+        mode: "0644"
+
+    - name: Extract Tomcat
+      ansible.builtin.unarchive:
+        src: "{{ tomcat_archive }}"
+        dest: "{{ tomcat_install_dir }}"
+        remote_src: true
+        extra_opts:
+          - --strip-components=1
+        creates: "{{ tomcat_install_dir }}/bin/catalina.sh"
+
+    - name: Set Tomcat directory ownership
+      ansible.builtin.file:
+        path: "{{ tomcat_install_dir }}"
+        state: directory
+        owner: "{{ tomcat_user }}"
+        group: "{{ tomcat_user }}"
+        recurse: true
+
+    - name: Make Tomcat scripts executable
+      ansible.builtin.file:
+        path: "{{ tomcat_install_dir }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: Install Tomcat systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/tomcat.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Apache Tomcat 10.1
+          After=network.target
+
+          [Service]
+          Type=forking
+          User=tomcat
+          Group=tomcat
+          Environment="JAVA_HOME=/usr/lib/jvm/java-21-amazon-corretto"
+          Environment="CATALINA_HOME=/opt/tomcat"
+          Environment="CATALINA_BASE=/opt/tomcat"
+          Environment="CATALINA_PID=/opt/tomcat/temp/tomcat.pid"
+          ExecStart=/opt/tomcat/bin/startup.sh
+          ExecStop=/opt/tomcat/bin/shutdown.sh
+          Restart=on-failure
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart Tomcat
+
+    - name: Ensure Tomcat is enabled and started
+      ansible.builtin.systemd:
+        name: tomcat
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  handlers:
+    - name: Restart Tomcat
+      ansible.builtin.systemd:
+        name: tomcat
+        state: restarted
+        daemon_reload: true

@@ -1,0 +1,64 @@
+---
+- name: Deploy Calculator Web application to Tomcat
+  hosts: calculator
+  become: true
+  gather_facts: false
+
+  vars_files:
+    - nexus-vault.yml
+
+  vars:
+    tomcat_home: /opt/tomcat
+    nexus_base_url: "http://nexus.leancloudandevops.online:8081"
+    nexus_repository: "maven-releases"
+    artifact_group_path: "com/example"
+    artifact_id: "DevOpsCalculatorWeb-yeswanth"
+    artifact_version: "1.0.2"
+    artifact_file: "{{ artifact_id }}-{{ artifact_version }}.war"
+    artifact_url: "{{ nexus_base_url }}/repository/{{ nexus_repository }}/{{ artifact_group_path }}/{{ artifact_id }}/{{ artifact_version }}/{{ artifact_file }}"
+    download_path: "/tmp/{{ artifact_file }}"
+
+  tasks:
+    - name: Download WAR from authenticated Nexus repository
+      ansible.builtin.get_url:
+        url: "{{ artifact_url }}"
+        dest: "{{ download_path }}"
+        url_username: "{{ nexus_username }}"
+        url_password: "{{ nexus_password }}"
+        force_basic_auth: true
+        mode: "0644"
+      no_log: true
+
+    - name: Stop Tomcat before deployment
+      ansible.builtin.systemd:
+        name: tomcat
+        state: stopped
+
+    - name: Deploy WAR to Tomcat
+      ansible.builtin.copy:
+        src: "{{ download_path }}"
+        dest: "{{ tomcat_home }}/webapps/calculator.war"
+        remote_src: true
+        owner: tomcat
+        group: tomcat
+        mode: "0644"
+
+    - name: Start Tomcat
+      ansible.builtin.systemd:
+        name: tomcat
+        state: started
+        enabled: true
+
+    - name: Wait for Calculator application
+      ansible.builtin.uri:
+        url: "http://localhost:8080/calculator/"
+        method: GET
+        status_code: 200
+      register: calculator_response
+      retries: 12
+      delay: 5
+      until: calculator_response.status == 200
+
+    - name: Display deployment result
+      ansible.builtin.debug:
+        msg: "Calculator Web deployed successfully. HTTP status: {{ calculator_response.status }}"
