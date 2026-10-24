@@ -257,11 +257,23 @@ EOF
         }
 
         success {
-            echo 'Build, tests, SonarQube analysis, Nexus deployment, and Tomcat deployment succeeded.'
-        }
+        slackSend(
+            channel: '#devops-builds',
+            color: 'good',
+            message: """SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}
+Build URL: ${env.BUILD_URL}"""
+        )
+    }
 
-        failure {
-            echo 'Pipeline failed. Review the Jenkins console output.'
-        }
+    failure {
+        slackSend(
+            channel: '#devops-builds',
+            color: 'danger',
+            message: """FAILURE: ${env.JOB_NAME} #${env.BUILD_NUMBER}
+Build URL: ${env.BUILD_URL}
+Please check the Jenkins console output."""
+        )
+    }
+
     }
 }
