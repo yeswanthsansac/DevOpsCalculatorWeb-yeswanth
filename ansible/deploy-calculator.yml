@@ -9,7 +9,7 @@
 
   vars:
     tomcat_home: /opt/tomcat
-    nexus_base_url: "http://nexus.leancloudandevops.online:8081"
+    nexus_base_url: "http://35.175.197.238:8081"
     nexus_repository: "maven-releases"
     artifact_group_path: "com/example"
     artifact_id: "DevOpsCalculatorWeb-yeswanth"
