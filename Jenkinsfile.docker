@@ -1,0 +1,135 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = 'us-east-1'
+        ACCOUNT_ID = '687633314352'
+        REPOSITORY = 'student-webapp'
+        ECR_REGISTRY = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_IMAGE = "${ECR_REGISTRY}/${REPOSITORY}"
+        DEPLOY_HOST = '10.0.215.123'
+        JAVA_HOME = '/usr/lib/jvm/java-21-amazon-corretto.x86_64'
+        PATH = "${JAVA_HOME}/bin:${PATH}"
+        DEPLOY_USER = 'ec2-user'
+        DEPLOY_CONTAINER = 'calculator-app'
+        DEPLOY_HOST_PORT = '8081'
+        DEPLOY_CONTAINER_PORT = '8080'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build WAR') {
+            steps {
+                sh '''
+                    set -eu
+                    export JAVA_HOME=/usr/lib/jvm/java-21-amazon-corretto.x86_64
+                    export PATH="$JAVA_HOME/bin:$PATH"
+                    mvn -B clean package -DskipTests
+                    test -n "$(find target -maxdepth 1 -name '*.war' -print -quit)"
+                '''
+            }
+        }
+
+        stage('Create Image Version') {
+            steps {
+                script {
+                    env.IMAGE_TAG = "build-${env.BUILD_NUMBER}"
+                    env.VERSIONED_IMAGE = "${env.ECR_IMAGE}:${env.IMAGE_TAG}"
+                }
+                echo "Publishing ${env.VERSIONED_IMAGE}"
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                    set -eu
+                    test -f Dockerfile
+                    docker build --pull \
+                      -t "$VERSIONED_IMAGE" .
+                '''
+            }
+        }
+
+        stage('Push to ECR') {
+            steps {
+                sh '''
+                    set -eu
+                    aws ecr get-login-password --region "$AWS_REGION" |
+                      docker login --username AWS --password-stdin "$ECR_REGISTRY"
+                    docker push "$VERSIONED_IMAGE"
+                '''
+            }
+        }
+
+        stage('Deploy to Tomcat Server') {
+            steps {
+                // Uses Jenkins' SSH private-key credential binding; does not require the SSH Agent plugin.
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'ansible-target-ssh-student',
+                    keyFileVariable: 'SSH_KEY',
+                    usernameVariable: 'SSH_CREDENTIAL_USER'
+                )]) {
+                    sh '''
+                        set -eu
+
+                        ssh -i "$SSH_KEY" \
+                          -o IdentitiesOnly=yes \
+                          -o StrictHostKeyChecking=accept-new \
+                          "$DEPLOY_USER@$DEPLOY_HOST" \
+                          "AWS_REGION='$AWS_REGION' \
+                           ECR_REGISTRY='$ECR_REGISTRY' \
+                           ECR_IMAGE='$VERSIONED_IMAGE' \
+                           DEPLOY_CONTAINER='$DEPLOY_CONTAINER' \
+                           DEPLOY_HOST_PORT='$DEPLOY_HOST_PORT' \
+                           DEPLOY_CONTAINER_PORT='$DEPLOY_CONTAINER_PORT' \
+                           bash -s" <<'REMOTE'
+                        set -eu
+
+                        aws ecr get-login-password --region "$AWS_REGION" |
+                          sudo docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+                        sudo docker pull "$ECR_IMAGE"
+
+                        sudo docker rm -f "$DEPLOY_CONTAINER" 2>/dev/null || true
+
+                        sudo docker run -d \
+                          --name "$DEPLOY_CONTAINER" \
+                          --restart unless-stopped \
+                          -p "$DEPLOY_HOST_PORT:$DEPLOY_CONTAINER_PORT" \
+                          "$ECR_IMAGE"
+
+                        for attempt in $(seq 1 30); do
+                          if curl -fsS "http://localhost:$DEPLOY_HOST_PORT/Calculator/" >/dev/null; then
+                            echo "Deployment successful."
+                            exit 0
+                          fi
+                          sleep 2
+                        done
+
+                        sudo docker logs --tail 100 "$DEPLOY_CONTAINER" || true
+                        exit 1
+REMOTE
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Build and deployment succeeded: ${env.VERSIONED_IMAGE}"
+        }
+        failure {
+            echo 'Pipeline failed. Check the stage logs.'
+        }
+        always {
+            sh 'docker logout "${ECR_REGISTRY}" >/dev/null 2>&1 || true'
+        }
+    }
+}
