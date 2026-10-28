@@ -121,6 +121,47 @@ EOF
                 }
             }
         }
+        
+
+        stage('Build Docker Image') {
+    steps {
+        script {
+             env.AWS_REGION =us-east-1          // Replace
+            env.AWS_ACCOUNT_ID =687633314352    // Replace
+            env.ECR_REPOSITORY =student-webapp  // Replace
+            env.ECR_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com"
+            env.IMAGE_TAG = "build-${env.BUILD_NUMBER}"
+            env.ECR_IMAGE = "${env.ECR_REGISTRY}/${env.ECR_REPOSITORY}:${env.IMAGE_TAG}"
+        }
+        sh '''
+            set -eu
+            test -f Dockerfile
+            ls -lh target/*.war
+            docker build -t "$ECR_IMAGE" .
+        '''
+    }
+}
+
+stage('Login to Amazon ECR') {
+    steps {
+        sh '''
+            set -eu
+            aws ecr get-login-password --region "$AWS_REGION" |
+              docker login --username AWS --password-stdin "$ECR_REGISTRY"
+        '''
+    }
+}
+
+stage('Push Docker Image to ECR') {
+    steps {
+        sh '''
+            set -eu
+            docker push "$ECR_IMAGE"
+            docker logout "$ECR_REGISTRY"
+        '''
+    }
+}
+
 
         stage('Provision Tomcat Server via Ansible') {
             steps {
