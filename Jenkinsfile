@@ -124,65 +124,7 @@ EOF
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    env.AWS_REGION = 'us-east-1'
-                    env.AWS_ACCOUNT_ID = '687633314352'
-                    env.ECR_REPOSITORY = 'student-webapp'
-
-                    env.ECR_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com"
-
-                    env.IMAGE_TAG = "build-${env.BUILD_NUMBER}"
-
-                    env.ECR_IMAGE = "${env.ECR_REGISTRY}/${env.ECR_REPOSITORY}:${env.IMAGE_TAG}"
-
-                    echo "AWS Region: ${env.AWS_REGION}"
-                    echo "ECR Registry: ${env.ECR_REGISTRY}"
-                    echo "ECR Repository: ${env.ECR_REPOSITORY}"
-                    echo "Docker Image: ${env.ECR_IMAGE}"
-                }
-
-                sh '''
-                    set -eu
-
-                    test -f Dockerfile
-                    test -f target/calculator.war
-
-                    ls -lh target/calculator.war
-
-                    docker build \
-                        -t "$ECR_IMAGE" \
-                        .
-                '''
-            }
-        }
-
-        stage('Login to Amazon ECR') {
-            steps {
-                sh '''
-                    set -eu
-
-                    aws ecr get-login-password \
-                        --region "$AWS_REGION" |
-                    docker login \
-                        --username AWS \
-                        --password-stdin "$ECR_REGISTRY"
-                '''
-            }
-        }
-
-        stage('Push Docker Image to ECR') {
-            steps {
-                sh '''
-                    set -eu
-
-                    docker push "$ECR_IMAGE"
-
-                    docker logout "$ECR_REGISTRY"
-                '''
-            }
-        }
+       
 
         stage('Provision Tomcat Server via Ansible') {
             steps {
