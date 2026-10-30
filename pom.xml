@@ -7,7 +7,7 @@
 
     <groupId>com.example</groupId>
     <artifactId>DevOpsCalculatorWeb-yeswanth</artifactId>
-    <version>1.0.5</version>
+    <version>1.0.6</version>
     <packaging>war</packaging>
 
     <name>DevOps Calculator Web - yeswanth</name>
@@ -40,7 +40,7 @@
     <repository>
         <id>nexus-releases</id>
         <name>Nexus Maven Releases</name>
-        <url>http://35.175.197.238:8081/repository/maven-releases/</url>
+        <url>http://nexus.devops1.publicvm.com:8081/repository/maven-releases/</url>
     </repository>
 </distributionManagement>
 
